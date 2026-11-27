@@ -1,0 +1,10 @@
+[package]
+name = "vibeos-bootloader"
+version = "0.0.1"
+edition = "2024"
+
+[[bin]]
+name = "vibeos-bootloader"
+path = "src/main.rs"
+test = false
+bench = false
