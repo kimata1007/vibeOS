@@ -20,13 +20,42 @@ pub extern "efiapi" fn efi_main(_image: usize, table: *mut uefi::SystemTable) ->
     };
     let status = unsafe { uefi::print(table, "[ OK ] Memory map acquired.\r\n") };
     if status & uefi::ERROR != 0 { return status; }
-    let _entry = match unsafe { elf::load(bs, KERNEL) } {
+    let entry = match unsafe { elf::load(bs, KERNEL) } {
         Ok(entry) => entry,
         Err(status) => return status,
     };
     let status = unsafe { uefi::print(table, "[ OK ] Kernel ELF loaded.\r\n") };
     if status & uefi::ERROR != 0 { return status; }
-    loop { core::hint::spin_loop(); }
+    // No firmware calls between GetMemoryMap and ExitBootServices except ExitBootServices.
+    // Retry once if firmware changed the map key.
+    let mut attempts = 0;
+    loop {
+        let map = match unsafe { uefi::memory_map(bs, &mut buffer) } {
+            Ok(map) => map,
+            Err(status) => {
+                if attempts == 0 { return status; }
+                halt();
+            }
+        };
+        let info = vibeos_kernel::BootInfo {
+            memory_map: buffer.0.as_ptr(), memory_map_size: map.size,
+            descriptor_size: map.stride, descriptor_version: map.version,
+        };
+        let status = unsafe { ((*bs).exit_boot_services)(_image, map.key) };
+        if status == 0 {
+            // SAFETY: trusted ELF entry, SysV x86-64 ABI, identity mapping from firmware.
+            // The kernel switches to its own stack and never returns.
+            let start: unsafe extern "sysv64" fn(*const vibeos_kernel::BootInfo) -> ! =
+                unsafe { core::mem::transmute(entry) };
+            unsafe { start(&info) }
+        }
+        if status != uefi::INVALID_PARAMETER || attempts != 0 { halt(); }
+        attempts += 1;
+    }
+}
+
+fn halt() -> ! {
+    loop { unsafe { core::arch::asm!("cli; hlt", options(nomem, nostack)); } }
 }
 
 #[panic_handler]
