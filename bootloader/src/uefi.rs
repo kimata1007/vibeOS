@@ -91,7 +91,10 @@ pub struct MapBuffer(pub [u8; 16384]);
 ///
 /// # Safety
 /// The caller must provide valid firmware boot services that are still active.
-pub unsafe fn memory_map(bs: *mut BootServices, buffer: &mut MapBuffer) -> Result<MemoryMap, Status> {
+pub unsafe fn memory_map(
+    bs: *mut BootServices,
+    buffer: &mut MapBuffer,
+) -> Result<MemoryMap, Status> {
     if bs.is_null() {
         return Err(INVALID_PARAMETER);
     }
@@ -172,9 +175,8 @@ struct GopInfo {
 pub unsafe fn framebuffer(bs: *mut BootServices) -> vibeos_kernel::Framebuffer {
     use vibeos_kernel::Framebuffer;
     let mut interface = core::ptr::null_mut();
-    let status = unsafe {
-        ((*bs).locate_protocol)(&GOP_GUID, core::ptr::null_mut(), &mut interface)
-    };
+    let status =
+        unsafe { ((*bs).locate_protocol)(&GOP_GUID, core::ptr::null_mut(), &mut interface) };
     if status & ERROR != 0 || interface.is_null() {
         return Framebuffer::EMPTY;
     }
