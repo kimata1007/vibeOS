@@ -73,7 +73,8 @@ pub struct BootServices {
     before_exit: [usize; 21],
     pub exit_boot_services: unsafe extern "efiapi" fn(usize, usize) -> Status,
     before_locate_protocol: [usize; 10],
-    locate_protocol: unsafe extern "efiapi" fn(*const Guid, *mut c_void, *mut *mut c_void) -> Status,
+    locate_protocol:
+        unsafe extern "efiapi" fn(*const Guid, *mut c_void, *mut *mut c_void) -> Status,
 }
 
 pub struct MemoryMap {
