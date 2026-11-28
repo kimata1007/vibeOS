@@ -89,7 +89,10 @@ pub struct MapBuffer(pub [u8; 16384]);
 ///
 /// # Safety
 /// The caller must provide valid firmware boot services that are still active.
-pub unsafe fn memory_map(bs: *mut BootServices, buffer: &mut MapBuffer) -> Result<MemoryMap, Status> {
+pub unsafe fn memory_map(
+    bs: *mut BootServices,
+    buffer: &mut MapBuffer,
+) -> Result<MemoryMap, Status> {
     if bs.is_null() {
         return Err(INVALID_PARAMETER);
     }
