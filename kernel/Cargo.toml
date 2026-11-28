@@ -2,3 +2,9 @@
 name = "vibeos-kernel"
 version = "0.0.1"
 edition = "2024"
+
+[[bin]]
+name = "vibeos-kernel"
+path = "src/main.rs"
+test = false
+bench = false
