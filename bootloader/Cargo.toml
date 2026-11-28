@@ -8,3 +8,6 @@ name = "vibeos-bootloader"
 path = "src/main.rs"
 test = false
 bench = false
+
+[dependencies]
+vibeos-kernel = { path = "../kernel" }
