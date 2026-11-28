@@ -1,7 +1,10 @@
 #![no_std]
 #![no_main]
 
+mod elf;
 mod uefi;
+
+static KERNEL: &[u8] = include_bytes!(env!("VIBEOS_KERNEL"));
 use core::panic::PanicInfo;
 
 /// UEFI application entry point.
@@ -23,6 +26,14 @@ pub unsafe extern "efiapi" fn efi_main(_image: usize, table: *mut uefi::SystemTa
         return status;
     }
     let status = unsafe { uefi::print(table, "[ OK ] Memory map acquired.\r\n") };
+    if status & uefi::ERROR != 0 {
+        return status;
+    }
+    if let Err(status) = unsafe { elf::load(bs, KERNEL) } {
+        let _ = unsafe { uefi::print(table, "[FAIL] Kernel ELF loading failed.\r\n") };
+        return status;
+    }
+    let status = unsafe { uefi::print(table, "[ OK ] Kernel ELF loaded.\r\n") };
     if status & uefi::ERROR != 0 {
         return status;
     }
