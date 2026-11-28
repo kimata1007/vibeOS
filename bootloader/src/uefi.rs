@@ -67,13 +67,8 @@ pub struct BootServices {
     restore_tpl: usize,
     allocate_pages: usize,
     free_pages: usize,
-    get_memory_map: unsafe extern "efiapi" fn(
-        *mut usize,
-        *mut u8,
-        *mut usize,
-        *mut usize,
-        *mut u32,
-    ) -> Status,
+    get_memory_map:
+        unsafe extern "efiapi" fn(*mut usize, *mut u8, *mut usize, *mut usize, *mut u32) -> Status,
 }
 
 // An aligned scratch buffer for the memory descriptors.
