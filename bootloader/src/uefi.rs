@@ -32,7 +32,7 @@ pub struct SystemTable {
     stderr_handle: usize,
     stderr: *mut c_void,
     runtime_services: *mut c_void,
-    boot_services: *mut c_void,
+    pub boot_services: *mut BootServices,
     number_of_table_entries: usize,
     configuration_table: *mut c_void,
 }
@@ -58,4 +58,49 @@ pub unsafe fn print(table: *mut SystemTable, text: &str) -> Status {
         buffer[len] = unit;
     }
     unsafe { ((*out).output_string)(out, buffer.as_ptr()) }
+}
+
+#[repr(C)]
+pub struct BootServices {
+    header: TableHeader,
+    raise_tpl: usize,
+    restore_tpl: usize,
+    allocate_pages: usize,
+    free_pages: usize,
+    get_memory_map:
+        unsafe extern "efiapi" fn(*mut usize, *mut u8, *mut usize, *mut usize, *mut u32) -> Status,
+}
+
+// An aligned scratch buffer for the memory descriptors.
+#[repr(align(8))]
+pub struct MapBuffer(pub [u8; 16384]);
+
+/// Retrieve and validate the firmware memory map.
+///
+/// # Safety
+/// The caller must provide valid firmware boot services that are still active.
+pub unsafe fn memory_map(bs: *mut BootServices, buffer: &mut MapBuffer) -> Result<(), Status> {
+    if bs.is_null() {
+        return Err(INVALID_PARAMETER);
+    }
+    let mut size = buffer.0.len();
+    let mut key = 0;
+    let mut stride = 0;
+    let mut version = 0;
+    let status = unsafe {
+        ((*bs).get_memory_map)(
+            &mut size,
+            buffer.0.as_mut_ptr(),
+            &mut key,
+            &mut stride,
+            &mut version,
+        )
+    };
+    if status & ERROR != 0 {
+        return Err(status);
+    }
+    if stride < 40 || size > buffer.0.len() || size == 0 || !size.is_multiple_of(stride) {
+        return Err(INVALID_PARAMETER);
+    }
+    Ok(())
 }
