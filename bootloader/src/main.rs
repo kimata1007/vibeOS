@@ -26,6 +26,8 @@ pub extern "efiapi" fn efi_main(_image: usize, table: *mut uefi::SystemTable) ->
     };
     let status = unsafe { uefi::print(table, "[ OK ] Kernel ELF loaded.\r\n") };
     if status & uefi::ERROR != 0 { return status; }
+    let framebuffer = unsafe { uefi::framebuffer(bs) };
+    // GOP information is captured before ExitBootServices.
     // No firmware calls between GetMemoryMap and ExitBootServices except ExitBootServices.
     // Retry once if firmware changed the map key.
     let mut attempts = 0;
@@ -40,6 +42,7 @@ pub extern "efiapi" fn efi_main(_image: usize, table: *mut uefi::SystemTable) ->
         let info = vibeos_kernel::BootInfo {
             memory_map: buffer.0.as_ptr(), memory_map_size: map.size,
             descriptor_size: map.stride, descriptor_version: map.version,
+            framebuffer,
         };
         let status = unsafe { ((*bs).exit_boot_services)(_image, map.key) };
         if status == 0 {
