@@ -1,12 +1,15 @@
 #![no_std]
 #![no_main]
 
+mod uefi;
 use core::panic::PanicInfo;
 
-// Initial UEFI entry point; loading the kernel is a future milestone.
 #[unsafe(no_mangle)]
-pub extern "efiapi" fn efi_main(_image: usize, _system_table: *mut core::ffi::c_void) -> usize {
-    0
+pub extern "efiapi" fn efi_main(_image: usize, table: *mut uefi::SystemTable) -> usize {
+    // SAFETY: UEFI supplies the system table at application entry.
+    let status = unsafe { uefi::print(table, "VibeOS v0.0.1\r\n[ OK ] Bootloader initialized.\r\n") };
+    if status & uefi::ERROR != 0 { return status; }
+    loop { core::hint::spin_loop(); }
 }
 
 #[panic_handler]
