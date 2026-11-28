@@ -11,5 +11,7 @@ pub extern "efiapi" fn efi_main(_image: usize, _system_table: *mut core::ffi::c_
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    loop { core::hint::spin_loop(); }
+    loop {
+        core::hint::spin_loop();
+    }
 }
