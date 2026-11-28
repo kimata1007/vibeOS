@@ -1,16 +1,23 @@
 # Development
 
-VibeOS is a from-scratch x86-64 OS written in Rust, developed through vibe coding. The host is Apple Silicon macOS; QEMU will emulate x86-64. UEFI is the firmware interface, not the kernel.
+VibeOS is a from-scratch x86-64 OS written in Rust through vibe coding. Apple Silicon macOS runs an emulated x86-64 machine in QEMU.
 
-## Setup
+## Setup and run
 
-Install Rust via rustup and QEMU via Homebrew (`brew install qemu`). From the repository root, run:
+Install stable Rust via rustup and QEMU via Homebrew (`brew install qemu`). Then run:
 
 ```sh
-cargo build -p vibeos-bootloader --target x86_64-unknown-uefi
-cargo build -p vibeos-kernel --target x86_64-unknown-none
+bash scripts/build.sh
+bash scripts/run.sh
 ```
 
-The bootloader currently returns success to firmware; it does not load the kernel. The kernel is only a library scaffold. Next milestones: UEFI console output, separate kernel loading, ExitBootServices, and QEMU boot verification.
+Set `QEMU_FIRMWARE_DIR` if the firmware is not in Homebrew's default directory. The scripts stage a FAT boot volume under build/esp, without writing physical disks.
 
-License is pending a project decision.
+## Boot sequence
+
+UEFI loads BOOTX64.EFI, prints a boot message, and exposes the memory map. The loader embeds a separately linked ELF kernel, copies its loadable segments at 32 MiB, captures GOP information, obtains the final memory map, and exits Boot Services. The kernel switches to its own stack, writes to COM1, and draws directly to the RGB/BGR framebuffer.
+
+Expected terminal: VibeOS kernel entered after ExitBootServices; Framebuffer rendered.
+Expected QEMU display: VIBEOS / KERNEL OK.
+
+These are expected outputs, not verified test results. The current implementation assumes QEMU/OVMF identity mappings, a free fixed load address, and a supported GOP mode. No allocator, independent page tables, IDT, filesystem or runtime services integration yet. The loader's memory and page tables must remain reserved. License is pending a project decision.
