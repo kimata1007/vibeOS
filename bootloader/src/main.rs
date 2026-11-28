@@ -16,6 +16,16 @@ pub unsafe extern "efiapi" fn efi_main(_image: usize, table: *mut uefi::SystemTa
     if status & uefi::ERROR != 0 {
         return status;
     }
+    let bs = unsafe { (*table).boot_services };
+    let mut buffer = uefi::MapBuffer([0; 16384]);
+    if let Err(status) = unsafe { uefi::memory_map(bs, &mut buffer) } {
+        let _ = unsafe { uefi::print(table, "[FAIL] Memory map acquisition failed.\r\n") };
+        return status;
+    }
+    let status = unsafe { uefi::print(table, "[ OK ] Memory map acquired.\r\n") };
+    if status & uefi::ERROR != 0 {
+        return status;
+    }
     loop {
         core::hint::spin_loop();
     }
