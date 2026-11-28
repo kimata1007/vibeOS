@@ -83,9 +83,8 @@ pub unsafe fn load(bs: *mut BootServices, b: &[u8]) -> Result<usize, Status> {
         if let Some(s) = segment(b, start + i * 56).ok_or(INVALID_PARAMETER)? {
             let top = s.address + s.memory as u64;
             end = end.max(top);
-            executable |= s.flags & 1 != 0
-                && entry >= s.address
-                && entry < s.address + s.files as u64;
+            executable |=
+                s.flags & 1 != 0 && entry >= s.address && entry < s.address + s.files as u64;
         }
     }
     if !executable || end == BASE {
