@@ -32,7 +32,7 @@ pub struct SystemTable {
     stderr_handle: usize,
     stderr: *mut c_void,
     runtime_services: *mut c_void,
-    pub boot_services: *mut c_void,
+    pub boot_services: *mut BootServices,
     number_of_table_entries: usize,
     configuration_table: *mut c_void,
 }
@@ -50,4 +50,34 @@ pub unsafe fn print(table: *mut SystemTable, text: &str) -> Status {
         len += 1;
     }
     unsafe { ((*out).output_string)(out, buffer.as_ptr()) }
+}
+
+#[repr(C)]
+pub struct BootServices {
+    header: TableHeader,
+    raise_tpl: usize,
+    restore_tpl: usize,
+    pub allocate_pages: unsafe extern "efiapi" fn(u32, u32, usize, *mut u64) -> Status,
+    free_pages: usize,
+    get_memory_map: unsafe extern "efiapi" fn(*mut usize, *mut u8, *mut usize, *mut usize, *mut u32) -> Status,
+    // Entries from AllocatePool through UnloadImage, in UEFI specification order.
+    before_exit: [usize; 21],
+    pub exit_boot_services: unsafe extern "efiapi" fn(usize, usize) -> Status,
+}
+pub const BUFFER_TOO_SMALL: Status = ERROR | 5;
+#[repr(align(8))]
+pub struct MapBuffer(pub [u8; 65536]);
+pub struct MemoryMap {
+    pub size: usize,
+    pub key: usize,
+    pub stride: usize,
+    pub version: u32,
+}
+/// The caller must provide valid firmware services and an aligned buffer.
+pub unsafe fn memory_map(bs: *mut BootServices, buffer: &mut MapBuffer) -> Result<MemoryMap, Status> {
+    let mut map = MemoryMap { size: buffer.0.len(), key: 0, stride: 0, version: 0 };
+    let status = unsafe { ((*bs).get_memory_map)(&mut map.size, buffer.0.as_mut_ptr(), &mut map.key, &mut map.stride, &mut map.version) };
+    if status & ERROR != 0 { return Err(status); }
+    if map.stride < 40 || map.size > buffer.0.len() || map.size % map.stride != 0 { return Err(INVALID_PARAMETER); }
+    Ok(map)
 }
