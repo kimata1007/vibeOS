@@ -65,7 +65,7 @@ pub struct BootServices {
     header: TableHeader,
     raise_tpl: usize,
     restore_tpl: usize,
-    allocate_pages: usize,
+    pub allocate_pages: unsafe extern "efiapi" fn(u32, u32, usize, *mut u64) -> Status,
     free_pages: usize,
     get_memory_map:
         unsafe extern "efiapi" fn(*mut usize, *mut u8, *mut usize, *mut usize, *mut u32) -> Status,
