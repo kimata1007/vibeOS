@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 use core::{arch::global_asm, panic::PanicInfo};
+mod framebuffer;
 
 global_asm!(
     ".section .bss.stack,\"aw\",@nobits",
@@ -22,7 +23,15 @@ global_asm!(
 #[unsafe(no_mangle)]
 extern "C" fn kernel_main(info: *const vibeos_kernel::BootInfo) -> ! {
     // The loader's BootInfo and map remain in reserved loader memory.
-    if !info.is_null() { serial(b"VibeOS kernel entered after ExitBootServices\r\n"); }
+    if !info.is_null() {
+        serial(b"VibeOS kernel entered after ExitBootServices\r\n");
+        let fb = unsafe { (*info).framebuffer };
+        if unsafe { framebuffer::render(fb) } {
+            serial(b"Framebuffer rendered\r\n");
+        } else {
+            serial(b"Framebuffer unavailable\r\n");
+        }
+    }
     loop { unsafe { core::arch::asm!("hlt", options(nomem, nostack)); } }
 }
 
