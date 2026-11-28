@@ -69,6 +69,16 @@ pub struct BootServices {
     free_pages: usize,
     get_memory_map:
         unsafe extern "efiapi" fn(*mut usize, *mut u8, *mut usize, *mut usize, *mut u32) -> Status,
+    // AllocatePool through UnloadImage, in UEFI specification order.
+    before_exit: [usize; 21],
+    pub exit_boot_services: unsafe extern "efiapi" fn(usize, usize) -> Status,
+}
+
+pub struct MemoryMap {
+    pub size: usize,
+    pub key: usize,
+    pub stride: usize,
+    pub version: u32,
 }
 
 // An aligned scratch buffer for the memory descriptors.
@@ -79,7 +89,10 @@ pub struct MapBuffer(pub [u8; 16384]);
 ///
 /// # Safety
 /// The caller must provide valid firmware boot services that are still active.
-pub unsafe fn memory_map(bs: *mut BootServices, buffer: &mut MapBuffer) -> Result<(), Status> {
+pub unsafe fn memory_map(
+    bs: *mut BootServices,
+    buffer: &mut MapBuffer,
+) -> Result<MemoryMap, Status> {
     if bs.is_null() {
         return Err(INVALID_PARAMETER);
     }
@@ -102,5 +115,10 @@ pub unsafe fn memory_map(bs: *mut BootServices, buffer: &mut MapBuffer) -> Resul
     if stride < 40 || size > buffer.0.len() || size == 0 || !size.is_multiple_of(stride) {
         return Err(INVALID_PARAMETER);
     }
-    Ok(())
+    Ok(MemoryMap {
+        size,
+        key,
+        stride,
+        version,
+    })
 }

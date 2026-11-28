@@ -1,4 +1,10 @@
 #![no_std]
 
-//! Initial kernel library. A standalone entry point and memory management
-//! will be implemented in subsequent milestones.
+//! Shared boot handoff ABI. Addresses remain valid while loader memory is reserved.
+#[repr(C)]
+pub struct BootInfo {
+    pub memory_map: *const u8,
+    pub memory_map_size: usize,
+    pub descriptor_size: usize,
+    pub descriptor_version: u32,
+}

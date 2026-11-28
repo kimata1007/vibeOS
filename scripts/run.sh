@@ -15,4 +15,4 @@ chmod u+w build/vars.fd
 exec qemu-system-x86_64 -machine q35,accel=tcg -m 256M \
   -drive "if=pflash,format=raw,readonly=on,file=$code" \
   -drive "if=pflash,format=raw,file=build/vars.fd" \
-  -drive "format=raw,file=fat:rw:build/esp" -net none -no-reboot
+  -drive "format=raw,file=fat:rw:build/esp" -net none -no-reboot -serial stdio
