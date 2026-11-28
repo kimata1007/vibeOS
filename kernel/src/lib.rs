@@ -21,15 +21,29 @@ pub struct Framebuffer {
     // UEFI PixelRedGreenBlueReserved8BitPerColor = 0, BGR = 1.
     pub format: u32,
 }
+
 impl Framebuffer {
-    pub const EMPTY: Self = Self { base: 0, size: 0, width: 0, height: 0, stride: 0, format: 0 };
+    pub const EMPTY: Self = Self {
+        base: 0,
+        size: 0,
+        width: 0,
+        height: 0,
+        stride: 0,
+        format: 0,
+    };
 
     pub fn valid(&self) -> bool {
-        self.base != 0 && self.base % 4 == 0 && self.width != 0 && self.height != 0
-            && self.width <= self.stride && self.format <= 1
+        self.base != 0
+            && self.base.is_multiple_of(4)
+            && self.width != 0
+            && self.height != 0
+            && self.width <= self.stride
+            && self.format <= 1
             && self.base.checked_add(self.size as u64).is_some()
             && self.size <= isize::MAX as usize
-            && (self.stride as usize).checked_mul(self.height as usize)
-                .and_then(|n| n.checked_mul(4)).is_some_and(|n| n <= self.size)
+            && (self.stride as usize)
+                .checked_mul(self.height as usize)
+                .and_then(|n| n.checked_mul(4))
+                .is_some_and(|n| n <= self.size)
     }
 }
