@@ -72,6 +72,9 @@ pub struct BootServices {
     // AllocatePool through UnloadImage, in UEFI specification order.
     before_exit: [usize; 21],
     pub exit_boot_services: unsafe extern "efiapi" fn(usize, usize) -> Status,
+    before_locate_protocol: [usize; 10],
+    locate_protocol:
+        unsafe extern "efiapi" fn(*const Guid, *mut c_void, *mut *mut c_void) -> Status,
 }
 
 pub struct MemoryMap {
@@ -121,4 +124,79 @@ pub unsafe fn memory_map(
         stride,
         version,
     })
+}
+
+#[repr(C)]
+struct Guid {
+    data1: u32,
+    data2: u16,
+    data3: u16,
+    data4: [u8; 8],
+}
+
+const GOP_GUID: Guid = Guid {
+    data1: 0x9042a9de,
+    data2: 0x23dc,
+    data3: 0x4a38,
+    data4: [0x96, 0xfb, 0x7a, 0xde, 0xd0, 0x80, 0x51, 0x6a],
+};
+
+#[repr(C)]
+struct Gop {
+    query_mode: usize,
+    set_mode: usize,
+    blt: usize,
+    mode: *const GopMode,
+}
+
+#[repr(C)]
+struct GopMode {
+    max_mode: u32,
+    mode: u32,
+    info: *const GopInfo,
+    size_of_info: usize,
+    framebuffer_base: u64,
+    framebuffer_size: usize,
+}
+
+#[repr(C)]
+struct GopInfo {
+    version: u32,
+    width: u32,
+    height: u32,
+    format: u32,
+    pixel_information: [u32; 4],
+    pixels_per_scan_line: u32,
+}
+
+/// Capture direct RGB/BGR framebuffer information before exiting boot services.
+///
+/// # Safety
+/// The firmware must supply valid, active boot services and GOP structures.
+pub unsafe fn framebuffer(bs: *mut BootServices) -> vibeos_kernel::Framebuffer {
+    use vibeos_kernel::Framebuffer;
+    let mut interface = core::ptr::null_mut();
+    let status =
+        unsafe { ((*bs).locate_protocol)(&GOP_GUID, core::ptr::null_mut(), &mut interface) };
+    if status & ERROR != 0 || interface.is_null() {
+        return Framebuffer::EMPTY;
+    }
+    let mode = unsafe { (*(interface as *const Gop)).mode };
+    if mode.is_null() {
+        return Framebuffer::EMPTY;
+    }
+    let mode = unsafe { &*mode };
+    if mode.info.is_null() || mode.size_of_info < core::mem::size_of::<GopInfo>() {
+        return Framebuffer::EMPTY;
+    }
+    let info = unsafe { &*mode.info };
+    let fb = Framebuffer {
+        base: mode.framebuffer_base,
+        size: mode.framebuffer_size,
+        width: info.width,
+        height: info.height,
+        stride: info.pixels_per_scan_line,
+        format: info.format,
+    };
+    if fb.valid() { fb } else { Framebuffer::EMPTY }
 }

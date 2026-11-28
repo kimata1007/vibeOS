@@ -40,6 +40,7 @@ pub unsafe extern "efiapi" fn efi_main(image: usize, table: *mut uefi::SystemTab
     if status & uefi::ERROR != 0 {
         return status;
     }
+    let framebuffer = unsafe { uefi::framebuffer(bs) };
     let status = unsafe { uefi::print(table, "[ OK ] Exiting boot services.\r\n") };
     if status & uefi::ERROR != 0 {
         return status;
@@ -57,6 +58,7 @@ pub unsafe extern "efiapi" fn efi_main(image: usize, table: *mut uefi::SystemTab
             memory_map_size: map.size,
             descriptor_size: map.stride,
             descriptor_version: map.version,
+            framebuffer,
         };
         let status = unsafe { ((*bs).exit_boot_services)(image, map.key) };
         if status == 0 {
