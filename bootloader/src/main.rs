@@ -1,64 +1,87 @@
 #![no_std]
 #![no_main]
 
-mod uefi;
 mod elf;
+mod uefi;
+
 static KERNEL: &[u8] = include_bytes!(env!("VIBEOS_KERNEL"));
 use core::panic::PanicInfo;
 
+/// UEFI application entry point.
+///
+/// # Safety
+/// The firmware must provide a valid system table with active boot services.
 #[unsafe(no_mangle)]
-pub extern "efiapi" fn efi_main(_image: usize, table: *mut uefi::SystemTable) -> usize {
+pub unsafe extern "efiapi" fn efi_main(image: usize, table: *mut uefi::SystemTable) -> usize {
     // SAFETY: UEFI supplies the system table at application entry.
-    let status = unsafe { uefi::print(table, "VibeOS v0.0.1\r\n[ OK ] Bootloader initialized.\r\n") };
-    if status & uefi::ERROR != 0 { return status; }
+    let status =
+        unsafe { uefi::print(table, "VibeOS v0.0.1\r\n[ OK ] Bootloader initialized.\r\n") };
+    if status & uefi::ERROR != 0 {
+        return status;
+    }
     let bs = unsafe { (*table).boot_services };
-    if bs.is_null() { return uefi::INVALID_PARAMETER; }
-    let mut buffer = uefi::MapBuffer([0; 65536]);
-    let _map = match unsafe { uefi::memory_map(bs, &mut buffer) } {
-        Ok(map) => map,
-        Err(status) => return status,
-    };
+    let mut buffer = uefi::MapBuffer([0; 16384]);
+    if let Err(status) = unsafe { uefi::memory_map(bs, &mut buffer) } {
+        let _ = unsafe { uefi::print(table, "[FAIL] Memory map acquisition failed.\r\n") };
+        return status;
+    }
     let status = unsafe { uefi::print(table, "[ OK ] Memory map acquired.\r\n") };
-    if status & uefi::ERROR != 0 { return status; }
+    if status & uefi::ERROR != 0 {
+        return status;
+    }
     let entry = match unsafe { elf::load(bs, KERNEL) } {
         Ok(entry) => entry,
-        Err(status) => return status,
+        Err(status) => {
+            let _ = unsafe { uefi::print(table, "[FAIL] Kernel ELF loading failed.\r\n") };
+            return status;
+        }
     };
     let status = unsafe { uefi::print(table, "[ OK ] Kernel ELF loaded.\r\n") };
-    if status & uefi::ERROR != 0 { return status; }
-    // No firmware calls between GetMemoryMap and ExitBootServices except ExitBootServices.
-    // Retry once if firmware changed the map key.
-    let mut attempts = 0;
-    loop {
+    if status & uefi::ERROR != 0 {
+        return status;
+    }
+    let status = unsafe { uefi::print(table, "[ OK ] Exiting boot services.\r\n") };
+    if status & uefi::ERROR != 0 {
+        return status;
+    }
+
+    // Refresh the map immediately before exit; retry once on a stale key.
+    for attempt in 0..2 {
         let map = match unsafe { uefi::memory_map(bs, &mut buffer) } {
             Ok(map) => map,
-            Err(status) => {
-                if attempts == 0 { return status; }
-                halt();
-            }
+            Err(status) if attempt == 0 => return status,
+            Err(_) => halt(),
         };
         let info = vibeos_kernel::BootInfo {
-            memory_map: buffer.0.as_ptr(), memory_map_size: map.size,
-            descriptor_size: map.stride, descriptor_version: map.version,
+            memory_map: buffer.0.as_ptr(),
+            memory_map_size: map.size,
+            descriptor_size: map.stride,
+            descriptor_version: map.version,
         };
-        let status = unsafe { ((*bs).exit_boot_services)(_image, map.key) };
+        let status = unsafe { ((*bs).exit_boot_services)(image, map.key) };
         if status == 0 {
-            // SAFETY: trusted ELF entry, SysV x86-64 ABI, identity mapping from firmware.
-            // The kernel switches to its own stack and never returns.
+            // SAFETY: the validated ELF uses the SysV ABI and firmware identity mapping.
+            // The kernel switches stacks and never returns.
             let start: unsafe extern "sysv64" fn(*const vibeos_kernel::BootInfo) -> ! =
                 unsafe { core::mem::transmute(entry) };
             unsafe { start(&info) }
         }
-        if status != uefi::INVALID_PARAMETER || attempts != 0 { halt(); }
-        attempts += 1;
+        if status != uefi::INVALID_PARAMETER {
+            halt();
+        }
     }
+    halt()
 }
 
 fn halt() -> ! {
-    loop { unsafe { core::arch::asm!("cli; hlt", options(nomem, nostack)); } }
+    loop {
+        unsafe { core::arch::asm!("cli; hlt", options(nomem, nostack)) };
+    }
 }
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    loop { core::hint::spin_loop(); }
+    loop {
+        core::hint::spin_loop();
+    }
 }

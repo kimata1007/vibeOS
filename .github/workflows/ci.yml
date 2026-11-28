@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Rust quality checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Rust
+        run: |
+          rustup show
+          rustup component add rustfmt clippy
+          rustup target add x86_64-unknown-uefi x86_64-unknown-none
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Check shell syntax
+        run: |
+          bash -n scripts/build.sh
+          bash -n scripts/run.sh
+      - name: Build bootloader and stage EFI image
+        run: |
+          bash scripts/build.sh
+          test -s build/esp/EFI/BOOT/BOOTX64.EFI
+      - name: Validate kernel ELF
+        run: |
+          readelf -h target/x86_64-unknown-none/release/vibeos-kernel
+          readelf -h target/x86_64-unknown-none/release/vibeos-kernel | grep -E 'Type:.*EXEC'
+          readelf -lW target/x86_64-unknown-none/release/vibeos-kernel
+      - name: Clippy (bootloader)
+        env:
+          VIBEOS_KERNEL: ${{ github.workspace }}/target/x86_64-unknown-none/release/vibeos-kernel
+        run: cargo clippy -p vibeos-bootloader --target x86_64-unknown-uefi -- -D warnings
+      - name: Clippy (kernel)
+        run: cargo clippy -p vibeos-kernel --target x86_64-unknown-none -- -D warnings

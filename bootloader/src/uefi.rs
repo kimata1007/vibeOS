@@ -37,17 +37,25 @@ pub struct SystemTable {
     configuration_table: *mut c_void,
 }
 
+/// Print a string through the firmware console.
+///
+/// # Safety
+///
 /// Firmware must supply a valid system table and active boot services.
 pub unsafe fn print(table: *mut SystemTable, text: &str) -> Status {
-    if table.is_null() { return INVALID_PARAMETER; }
+    if table.is_null() {
+        return INVALID_PARAMETER;
+    }
     let out = unsafe { (*table).console_out };
-    if out.is_null() { return INVALID_PARAMETER; }
+    if out.is_null() {
+        return INVALID_PARAMETER;
+    }
     let mut buffer = [0u16; 128];
-    let mut len = 0;
-    for unit in text.encode_utf16() {
-        if unit == 0 || len == buffer.len() - 1 { return INVALID_PARAMETER; }
+    for (len, unit) in text.encode_utf16().enumerate() {
+        if unit == 0 || len == buffer.len() - 1 {
+            return INVALID_PARAMETER;
+        }
         buffer[len] = unit;
-        len += 1;
     }
     unsafe { ((*out).output_string)(out, buffer.as_ptr()) }
 }
@@ -59,25 +67,55 @@ pub struct BootServices {
     restore_tpl: usize,
     pub allocate_pages: unsafe extern "efiapi" fn(u32, u32, usize, *mut u64) -> Status,
     free_pages: usize,
-    get_memory_map: unsafe extern "efiapi" fn(*mut usize, *mut u8, *mut usize, *mut usize, *mut u32) -> Status,
-    // Entries from AllocatePool through UnloadImage, in UEFI specification order.
+    get_memory_map:
+        unsafe extern "efiapi" fn(*mut usize, *mut u8, *mut usize, *mut usize, *mut u32) -> Status,
+    // AllocatePool through UnloadImage, in UEFI specification order.
     before_exit: [usize; 21],
     pub exit_boot_services: unsafe extern "efiapi" fn(usize, usize) -> Status,
 }
-pub const BUFFER_TOO_SMALL: Status = ERROR | 5;
-#[repr(align(8))]
-pub struct MapBuffer(pub [u8; 65536]);
+
 pub struct MemoryMap {
     pub size: usize,
     pub key: usize,
     pub stride: usize,
     pub version: u32,
 }
-/// The caller must provide valid firmware services and an aligned buffer.
+
+// An aligned scratch buffer for the memory descriptors.
+#[repr(align(8))]
+pub struct MapBuffer(pub [u8; 16384]);
+
+/// Retrieve and validate the firmware memory map.
+///
+/// # Safety
+/// The caller must provide valid firmware boot services that are still active.
 pub unsafe fn memory_map(bs: *mut BootServices, buffer: &mut MapBuffer) -> Result<MemoryMap, Status> {
-    let mut map = MemoryMap { size: buffer.0.len(), key: 0, stride: 0, version: 0 };
-    let status = unsafe { ((*bs).get_memory_map)(&mut map.size, buffer.0.as_mut_ptr(), &mut map.key, &mut map.stride, &mut map.version) };
-    if status & ERROR != 0 { return Err(status); }
-    if map.stride < 40 || map.size > buffer.0.len() || map.size % map.stride != 0 { return Err(INVALID_PARAMETER); }
-    Ok(map)
+    if bs.is_null() {
+        return Err(INVALID_PARAMETER);
+    }
+    let mut size = buffer.0.len();
+    let mut key = 0;
+    let mut stride = 0;
+    let mut version = 0;
+    let status = unsafe {
+        ((*bs).get_memory_map)(
+            &mut size,
+            buffer.0.as_mut_ptr(),
+            &mut key,
+            &mut stride,
+            &mut version,
+        )
+    };
+    if status & ERROR != 0 {
+        return Err(status);
+    }
+    if stride < 40 || size > buffer.0.len() || size == 0 || !size.is_multiple_of(stride) {
+        return Err(INVALID_PARAMETER);
+    }
+    Ok(MemoryMap {
+        size,
+        key,
+        stride,
+        version,
+    })
 }
